@@ -1,8 +1,8 @@
 # Data Exploration
 # Variable Identification    
 library(readr)
-#loanData <- read_csv("~/R_Programs/loanPrediction.csv")
-loanData <- read.csv("~/Downloads/loanPrediction.csv",na.strings=c("","NA"))
+loanData <- read_csv("~/R_Programs/loanPrediction.csv")
+#loanData <- read.csv("~/Downloads/loanPrediction.csv",na.strings=c("","NA"))
 str(loanData)   #Target Variable : Loan_Status "Y" or "N"
 
 loanData$Gender <- as.factor(loanData$Gender)
@@ -17,8 +17,8 @@ loanData$Loan_Amount_Term <- as.factor(loanData$Loan_Amount_Term)
 
 #Loading Test File
 
-#loanDataTestfile <- read_csv("C:/Users/Shubham/Downloads/loanDataTestfile.csv")
-loanDataTestfile <- read.csv("~/Downloads/loanDataTestfile.csv",na.strings=c("","NA"))
+loanDataTestfile <- read_csv("C:/Users/Shubham/Downloads/loanDataTestfile.csv")
+#loanDataTestfile <- read.csv("~/Downloads/loanDataTestfile.csv",na.strings=c("","NA"))
 
 loanDataTestfile$Gender <- as.factor(loanDataTestfile$Gender)
 loanDataTestfile$Married <- as.factor(loanDataTestfile$Married)
@@ -111,7 +111,7 @@ byGender2
 
 # Filling The Values
 for(i in which(is.na(Gender))){
-
+  
   if (combinedData[i,"CoapplicantIncome"] <= 5700){
     
     if(combinedData[i,"CoapplicantIncome"] <= 1000){
@@ -122,11 +122,9 @@ for(i in which(is.na(Gender))){
     }
   }
 }
-  
+
 
 # Filling Married Null Values
-
-combinedData[which(is.na(Married)),"TotalIncome"]
 
 # CREATING TOTAL INCOME 
 combinedData$TotalIncome <- combinedData$ApplicantIncome + combinedData$CoapplicantIncome
@@ -146,7 +144,7 @@ ggplot(aes(x = Married,  y = TotalIncome, fill = Property_Area), data =
          na.omit(subset(combinedData, TotalIncome <= 12500)))+
   geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
   facet_wrap(~Gender)
-  ggtitle("Married Vs Mean Total Income")
+ggtitle("Married Vs Mean Total Income")
 
 # MARRIED VS COAPPLICANT INCOME
 ggplot(aes(x = Married, y = CoapplicantIncome), data = 
@@ -206,268 +204,223 @@ for(i in which(is.na(Dependents))){
 
 
 # FILLING MISSING VALUE OF LOAN AMOUNT
-  ggplot(aes(x = ApplicantIncome, y = LoanAmount), 
-         data = na.omit(combinedData))+
-    geom_point()+
-    xlim(0,9000)
+ggplot(aes(x = ApplicantIncome, y = LoanAmount), 
+       data = na.omit(combinedData))+
+  geom_point()+
+  xlim(0,9000)
 
 # CROSS VALIDATION ON THE TOAL INCOME
-  library(caret)
-  
-  set.seed(100)
-  
-  train_control <- trainControl(method = "cv", number = 10, repeats = 10)  
-  
-  fit.amount <- train(LoanAmount~TotalIncome, 
-                      data = na.omit(subset(combinedData, TotalIncome <= 10000)),
-                      method = "lm")
-  print(fit.amount)
+library(caret)
 
- 
+set.seed(100)
+
+train_control <- trainControl(method = "cv", number = 10, repeats = 10)  
+
+fit.amount <- train(LoanAmount~TotalIncome, 
+                    data = na.omit(subset(combinedData, TotalIncome <= 10000)),
+                    method = "lm")
+print(fit.amount)
+
+
 # FITTING THE MODEL TO PREDICT LOAN AMOUNT
-  
-  lm.fit <- lm(LoanAmount~TotalIncome,
-               data = na.omit(subset(combinedData, TotalIncome <= 10000)))
-  
-  lm.predict <- predict(lm.fit, newdata = combinedData[which(is.na(LoanAmount)),])
-  
-  combinedData[which(is.na(LoanAmount)),"LoanAmount"] <- lm.predict
-  
+
+lm.fit <- lm(LoanAmount~TotalIncome,
+             data = na.omit(subset(combinedData, TotalIncome <= 10000)))
+
+lm.predict <- predict(lm.fit, newdata = combinedData[which(is.na(LoanAmount)),])
+
+combinedData[which(is.na(LoanAmount)),"LoanAmount"] <- lm.predict
+
 # FILLING SELF-EMPLOYED
 
-  #Self Employed have more mean salary
-  ggplot(aes(x = Self_Employed, y = ApplicantIncome),
-         data = subset(combinedData, ApplicantIncome < 9000))+
-    geom_bar(stat = "summary", fun.y = mean)+
-    ggtitle("Self_Employed Vs Mean Applicant Income")
-  
-  ggplot(aes(x = Self_Employed, y = ApplicantIncome, fill = Property_Area),
-         data = subset(subset(combinedData, !is.na(Self_Employed))),
-         ApplicantIncome < 9000)+
-    geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
-    ggtitle("Self_Employed Vs Mean Applicant Income")
-  
-  ggplot(aes(x = Property_Area, y = ApplicantIncome), 
-         data = na.omit(combinedData))+
+#Self Employed have more mean salary
+ggplot(aes(x = Self_Employed, y = ApplicantIncome),
+       data = subset(combinedData, ApplicantIncome < 9000))+
+  geom_bar(stat = "summary", fun.y = mean)+
+  ggtitle("Self_Employed Vs Mean Applicant Income")
+
+ggplot(aes(x = Self_Employed, y = ApplicantIncome, fill = Property_Area),
+       data = subset(subset(combinedData, !is.na(Self_Employed))),
+       ApplicantIncome < 9000)+
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
+  ggtitle("Self_Employed Vs Mean Applicant Income")
+
+ggplot(aes(x = Property_Area, y = ApplicantIncome), 
+       data = na.omit(combinedData))+
   geom_bar(stat = "summary", fun.y = median, position = "dodge")
-  
-  bySelfEmp <- subset(combinedData, !is.na(combinedData$Self_Employed)) %>%
-    filter(ApplicantIncome <= 9000)%>%
-    group_by(Self_Employed, Property_Area) %>%
-    summarise(mean = mean(ApplicantIncome),
-              user = n())
-  bySelfEmp
-  
-  # 10 FOLD CROSS VALIDATION ON SELF EMPLOYED
-  
-  incomeUpto9k <- combinedData[which(ApplicantIncome <= 9000),]
-  set.seed(100)
-  
-  train_control <- trainControl(method = "cv", number = 10, repeats = 10)  
-  
-  fit.amount <- train(Self_Employed~ApplicantIncome, 
-                      data = subset(incomeUpto9k, !is.na(incomeUpto9k$Self_Employed)),
-                      method = "lda")
-  print(fit.amount)
-  
-  # Training the model
-  lda.fit <- lda(Self_Employed~ApplicantIncome, 
-                 data = subset(incomeUpto9k, !is.na(incomeUpto9k$Self_Employed)))
-  
-  lda.predict <- predict(lda.fit, newdata= combinedData[which(is.na(Self_Employed)),])
-  
+
+bySelfEmp <- subset(combinedData, !is.na(combinedData$Self_Employed)) %>%
+  filter(ApplicantIncome <= 9000)%>%
+  group_by(Self_Employed, Property_Area) %>%
+  summarise(mean = mean(ApplicantIncome),
+            user = n())
+bySelfEmp
+
+# 10 FOLD CROSS VALIDATION ON SELF EMPLOYED
+
+incomeUpto9k <- combinedData[which(ApplicantIncome <= 9000),]
+set.seed(100)
+
+train_control <- trainControl(method = "cv", number = 10, repeats = 10)  
+
+fit.amount <- train(Self_Employed~ApplicantIncome, 
+                    data = subset(incomeUpto9k, !is.na(incomeUpto9k$Self_Employed)),
+                    method = "lda")
+print(fit.amount)
+
+# Training the model
+lda.fit <- lda(Self_Employed~ApplicantIncome, 
+               data = subset(incomeUpto9k, !is.na(incomeUpto9k$Self_Employed)))
+
+lda.predict <- predict(lda.fit, newdata= combinedData[which(is.na(Self_Employed)),])
+
 # FILLING THE VALUES
-  combinedData[which(is.na(Self_Employed)),"Self_Employed"] <- lda.predict$class 
-  
-  
- # FILLING LOAN TERM MISSING VALUES
-  
-  
-  # LOAN AMOUNT TERM
-    
-  combinedData$EMI <- combinedData$LoanAmount*1000/as.numeric(levels(
-    combinedData$Loan_Amount_Term))[combinedData$Loan_Amount_Term]
-  
-  ggplot(aes(x = Loan_Amount_Term, y = LoanAmount), data = 
-           subset(combinedData, !is.na(Loan_Amount_Term)))+
-    geom_boxplot()
-  
-  ggplot(aes(x = Loan_Amount_Term, y = TotalIncome), data = 
-           subset(combinedData, !is.na(combinedData$Loan_Amount_Term)))+
-    geom_boxplot()+
-    coord_cartesian(ylim = c(0,10000))
-  
-  # Outlier In EMI above 800
-  ggplot(aes(x = 0, y = EMI), data = combinedData)+
-    geom_boxplot()+
-    coord_cartesian(ylim = c(0,800))
-  
-
-  
-  library(MASS)
-  tempData  <- (combinedData[which(combinedData$TotalIncome <= 12500 &
-                                     combinedData$EMI <= 800),])
-  tempData$Loan_Amount_Term <- as.factor(tempData$Loan_Amount_Term)
-  tempData$Loan_Amount_Term <- droplevels(tempData$Loan_Amount_Term)
-  
-  set.seed(12)
-  cv <- train(Loan_Amount_Term~TotalIncome+EMI,
-              data = subset(tempData, !is.na(tempData$Loan_Amount_Term)),
-              method = "lda",
-              trControl = trainControl(method = "cv", number = 10, repeats = 10))
-  print(cv)
-  
-  
-  loanTerm.fit <- lda(Loan_Amount_Term ~ TotalIncome, 
-                  data = subset(tempData, !is.na(tempData$Loan_Amount_Term)))  
-  
-  loanTerm.predict <- predict(loanTerm.fit, newdata = subset(tempData, !is.na(tempData$Loan_Amount_Term)))
-  
-  table(loanTerm.predict$class, subset(tempData, !is.na(tempData$Loan_Amount_Term))$Loan_Amount_Term)
-
-  mean(loanTerm.predict$class != subset(tempData, !is.na(tempData$Loan_Amount_Term))$Loan_Amount_Term)
-  
-#Predicting Missing NA Loan Term Values
-  loanTermNa.predict <- predict(loanTerm.fit, newdata = combinedData[which(is.na(combinedData$Loan_Amount_Term)),])
-  
-  table(loanTermNa.predict$class)
-  
-  combinedData[which(is.na(combinedData$Loan_Amount_Term)),"Loan_Amount_Term"] <- loanTermNa.predict$class
- 
+combinedData[which(is.na(Self_Employed)),"Self_Employed"] <- lda.predict$class 
 
 
-# FIlling Missing Value of Credit History
-  
- # Creating EMI Column Again
+# FILLING LOAN TERM MISSING VALUES
+
+
+# LOAN AMOUNT TERM
+
 combinedData$EMI <- combinedData$LoanAmount*1000/as.numeric(levels(
   combinedData$Loan_Amount_Term))[combinedData$Loan_Amount_Term]
 
+ggplot(aes(x = Loan_Amount_Term, y = LoanAmount), data = 
+         subset(combinedData, !is.na(Loan_Amount_Term)))+
+  geom_boxplot()
+
+ggplot(aes(x = Loan_Amount_Term, y = TotalIncome), data = 
+         subset(combinedData, !is.na(combinedData$Loan_Amount_Term)))+
+  geom_boxplot()+
+  coord_cartesian(ylim = c(0,10000))
+
+# Outlier In EMI above 800
+ggplot(aes(x = 0, y = EMI), data = combinedData)+
+  geom_boxplot()+
+  coord_cartesian(ylim = c(0,800))
+
+
+
+library(MASS)
+tempData  <- (combinedData[which(combinedData$TotalIncome <= 12500 &
+                                   combinedData$EMI <= 800),])
+tempData$Loan_Amount_Term <- as.factor(tempData$Loan_Amount_Term)
+tempData$Loan_Amount_Term <- droplevels(tempData$Loan_Amount_Term)
+
+set.seed(12)
+cv <- train(Loan_Amount_Term~TotalIncome+EMI,
+            data = subset(tempData, !is.na(tempData$Loan_Amount_Term)),
+            method = "lda",
+            trControl = trainControl(method = "cv", number = 10, repeats = 10))
+print(cv)
+
+
+loanTerm.fit <- lda(Loan_Amount_Term ~ TotalIncome, 
+                    data = subset(tempData, !is.na(tempData$Loan_Amount_Term)))  
+
+loanTerm.predict <- predict(loanTerm.fit, newdata = subset(tempData, !is.na(tempData$Loan_Amount_Term)))
+
+table(loanTerm.predict$class, subset(tempData, !is.na(tempData$Loan_Amount_Term))$Loan_Amount_Term)
+
+mean(loanTerm.predict$class != subset(tempData, !is.na(tempData$Loan_Amount_Term))$Loan_Amount_Term)
+
+#Predicting Missing NA Loan Term Values
+loanTermNa.predict <- predict(loanTerm.fit, newdata = combinedData[which(is.na(combinedData$Loan_Amount_Term)),])
+
+table(loanTermNa.predict$class)
+
+combinedData[which(is.na(combinedData$Loan_Amount_Term)),"Loan_Amount_Term"] <- loanTermNa.predict$class
+
+
+
+# FIlling Missing Value of Credit History
+
+# Creating EMI Column Again
+
+#  [P x R x (1+R)^N]/[(1+R)^N-1]
+
+
+combinedData$Loan_Amount_Term <- as.numeric((levels(combinedData$
+                                                      Loan_Amount_Term))[combinedData$Loan_Amount_Term])
+attach(combinedData)
+
+combinedData$EMI <- (LoanAmount*0.11*(1.11^Loan_Amount_Term))/((1.11^Loan_Amount_Term)-1)
+
+# Credit History With EMI
+ggplot(aes(x = TotalIncome, y = EMI, color = Credit_History),
+       data = subset(combinedData, !is.na(combinedData$Credit_History)))+
+  geom_point()+
+  xlim(c(0,20000))+
+  ylim(c(0,60))
 # Credit History Vs TotalIncome  Vs Proper_Area
-  ggplot(aes(x = Credit_History, y = TotalIncome, fill = Property_Area),
-         data = subset(combinedData, !is.na(Credit_History)))+
-    geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
+ggplot(aes(x = Credit_History, y = TotalIncome, fill = Property_Area),
+       data = subset(combinedData, !is.na(Credit_History)))+
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
   ylim(c(0,11000))# Outlier greater than 12200 in Total Income
-  
-  ggplot(aes(x = Credit_History, fill = Self_Employed, y = TotalIncome),
-         data = subset(combinedData, !is.na(Credit_History)))+
-    geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
-    facet_grid(~Property_Area)+
+
+ggplot(aes(x = Credit_History, fill = Self_Employed, y = TotalIncome),
+       data = subset(combinedData, !is.na(Credit_History)))+
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
+  facet_grid(~Property_Area)+
   ylim(c(0,11000))+
   ggtitle("Total Mean Salary Less Than 10k")  # Matters: SelfEmployed_Yes, Property
-  
-  # Applicant Mean Salary greater than 10k
-  ggplot(aes(x = Credit_History, fill = Self_Employed, y = ApplicantIncome),
-         data = na.omit(subset(loanData, loanData$ApplicantIncome >= 10000)))+
-    geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
-    facet_grid(~Property_Area)+
-    ggtitle("Applicant Mean Salary Greater Than 10k")
-  
-  # Analysis On Total Income
-  ggplot(aes(x = Credit_History, fill = Self_Employed, y = TotalIncome),
-         data = na.omit(subset(loanData, loanData$TotalIncome <= 12200 & 
-                                 loanData$ApplicantIncome <= 10000)))+
-    geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
-    facet_grid(~Property_Area)+
-    ggtitle("Total Mean Salary Lesser Than 12k")
-  
-  
-  
-  
-  
- 
-  
-  # Group by Applicant Income, Credit History, EMI
-  loanData$EMI <- loanData$LoanAmount*1000/as.numeric(levels(
-    loanData$Loan_Amount_Term))[loanData$Loan_Amount_Term]
-  
-  byLoanAmount <- na.omit(combinedData) %>%
-    group_by(Credit_History,Property_Area,Self_Employed)%>%
-    summarise(meanTotalIncome = mean(TotalIncome),
-              meanEMI = mean(EMI),
-              user = n())
-  byLoanAmount
-  
-# Using Modelling Approach For Predicting Credit History
-tempData <- subset(combinedData, combinedData$TotalIncome < 11000)
-tempData <- subset(tempData, !is.na(tempData$Credit_History))
-tempData$Loan_Status <- NULL
 
-credit.cv <- train(Credit_History~.-Loan_ID-Loan_Amount_Term, 
-                    data = subset(tempData, tempData$EMI < 800),
-                    method = "lda",
-                    trControl = trainControl(method = "cv", number = 10, repeats = 10))
-
-credit.fit <- lda(Credit_History~.-Loan_ID-Loan_Amount_Term-ApplicantIncome-CoapplicantIncome-Gender-Married, 
-                  data = subset(tempData, tempData$EMI < 800))
-
-credit.predict <- predict(credit.fit,  tempData[which(is.na(tempData$Credit_History)),])
-table(credit.predict$class)
-mean(credit.predict$class != subset(tempData, tempData$EMI < 800)$Credit_History)
+# Applicant Mean Salary greater than 10k
+ggplot(aes(x = Credit_History, fill = Self_Employed, y = ApplicantIncome),
+       data = na.omit(subset(loanData, loanData$ApplicantIncome >= 10000)))+
+  geom_bar(stat = "summary", fun.y = mean, position = "dodge")+
+  facet_grid(~Property_Area)+
+  ggtitle("Applicant Mean Salary Greater Than 10k")
 
 
-  #  Chossing the subset of Predictors
-  ggplot(aes(x = Gender, fill = Loan_Status), data = 
-           subset(loanData, !is.na(loanData$Credit_History)))+
-    geom_bar()+
-    facet_wrap(~Credit_History)
-  
-  ggplot(aes(x = Dependents, fill = Loan_Status), data = loanData)+
-    geom_bar()+
-    facet_wrap(~Married)
-  
-  ggplot(aes(x = Education, fill = Loan_Status), data = 
-           subset(loanData, !is.na(loanData$Credit_History)))+
-    geom_bar()+
-    facet_wrap(~Credit_History)
-  
-  ggplot(aes(x = Self_Employed, fill = Loan_Status), data = 
-           subset(loanData, !is.na(loanData$Credit_History)))+
-    geom_bar()+
-    facet_wrap(~Credit_History) # People who are self-employed with credit 0 didnt get loan
-  
-  ggplot(aes(x = Loan_Status, y = ApplicantIncome), data = incomeUpto10k)+
-    geom_bar(stat = "summary", fun.y = mean)+
-    facet_wrap(~Self_Employed+Education)
-  
-  ggplot(aes(x = Loan_Status, y = TotalIncome), data = loanData)+
-    geom_boxplot()+
-    facet_wrap(~Self_Employed)+
-    ylim(c(0,8000))
-  
-  # Using Lasso For Feature Selection
-  set.seed(12)
-  train <- sample(1:559, 450)
-  loanData2 <- na.omit(loanData)
-  test.X = model.matrix(Loan_Status ~., data = loanData2[train,-1])[,-1]
-  train.Y = loanData2$Loan_Status[train]
-  test.Y <- model.matrix(Loan_Status ~., data = loanData2[-train,-1])[,-1]
-  grid <- 10^seq(10,-2 , length = 100)
-  
-  library(glmnet)
-  lasso.mod <- cv.glmnet(test.X, train.Y, alpha = 1, family = "binomial", nlambda = 100,
-                         type.measure = "class")
-  plot(lasso.mod)
-  
-  lasso.fit <- glmnet(test.X, train.Y, alpha = 1, family = "binomial", lambda = lasso.mod$lambda.min)
-  lasso.fit$beta[,1]
-  # Perform Cross Validation
-  
-  library(caret)
-  set.seed(12)
-  tarin_control1 <- trainControl(method = "cv", number = 10, repeats = 10)
-  kfoldcv <- train(Loan_Status ~ Credit_History, data = loanData2, method = "lda" , trControl = train_control)
-  print(kfoldcv)
-  
-  tarin_control2 <- trainControl(method = "cv", number = 10, repeats = 10)
-  kfoldcv <- train(Loan_Status ~ Credit_History+ApplicantIncome, data = loanData2, method = "lda" , trControl = train_control)
-  print(kfoldcv)
-  
-  # TRaining the model
-  lda.fit <- lda(Loan_Status ~ Credit_History, data = loanData2)
-  
-  
- 
-  
-  loanStatus.predict <- predict(lda.fit, newdata = na.omit(loanDataTestfile))
-  
-  summary(loanDataTestfile$Self_Employed)
+
+# Group by Applicant Income, Credit History, EMI
+loanData$EMI <- loanData$LoanAmount*1000/as.numeric(levels(
+  loanData$Loan_Amount_Term))[loanData$Loan_Amount_Term]
+
+byLoanAmount <- na.omit(combinedData) %>%
+  group_by(Credit_History,Property_Area,Self_Employed)%>%
+  summarise(meanTotalIncome = mean(TotalIncome),
+            meanEMI = mean(EMI),
+            user = n())
+byLoanAmount
+
+
+# Using Random Forest for Predicting Credit History
+library(randomForest)
+rf.creditHistory <- randomForest(Credit_History~Dependents+Gender+Married+Self_Employed+
+                                   TotalIncome+EMI+Property_Area,
+                                 data = subset(combinedData, !is.na(combinedData$Credit_History)),
+                                 ntree = 1000)
+rf.creditHistory
+
+# PREDICTING USING RANDOM FOREST MODEL
+rf.predict <- predict(rf.creditHistory, newdata = subset(combinedData, 
+                                                         is.na(combinedData$Credit_History)))
+rf.predict
+
+#Filling the Credit Histoy Null Values
+combinedData[which(is.na(combinedData$Credit_History)), "Credit_History"] <- rf.predict
+
+
+
+
+# USING RANDOM FOREST APPROACH FOR FITTING 
+rf.status <- randomForest(Loan_Status~Married+Dependents+Self_Employed+TotalIncome+
+                            Credit_History+Property_Area+Gender,
+                          data = na.omit(combinedData),
+                          ntree = 1000)
+
+rf.status
+
+rf.predictStatus <- predict(rf.status, newdata = subset(combinedData,
+                                                        is.na(combinedData$Loan_Status)))
+
+
+combinedData[which(is.na(combinedData$Loan_Status)),"Loan_Status"] <- rf.predictStatus
+
+# CREATING THE SUBMISSION FILE
+write.csv(file = "SubmissionFile04_06_17.csv", 
+          x = data.frame(combinedData[615:981, c("Loan_ID","Loan_Status")]),
+          row.names = FALSE)
