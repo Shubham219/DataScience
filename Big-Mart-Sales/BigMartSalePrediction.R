@@ -1,3 +1,6 @@
+# Clearing The Variables
+rm(list = ls())
+
 # SETTING DIRECTORY
 setwd("E:/Data Science/R_Programs/Analytics Vidya")
 
@@ -295,6 +298,16 @@ bigMart$Item_Class <- strtrim(bigMart$Item_Identifier, 2)
 
 bigMart$Item_Class <- as.factor(bigMart$Item_Class)
 
+levels((bigMart$Item_Class))
+
+# Assigning the fat content None to "NC Non COnsumable"
+bigMart$Item_Fat_Content <- as.character(bigMart$Item_Fat_Content)
+
+bigMart[which(bigMart$Item_Class == "NC"), "Item_Fat_Content"] <- "None"
+
+bigMart$Item_Fat_Content <- as.factor(bigMart$Item_Fat_Content)
+
+
 # Arranging by item type
 bigMart %>%
   group_by(Item_Class, Item_Type) %>%
@@ -319,6 +332,43 @@ library(corrplot)
 corrplot(corMatrix, type = "upper", method = "number")
 
 # Item MRP has strong corelation with Sales
+
+# Checking distribution of Item SOld
+hist(bigMart$Item_Sold[1:8523], breaks = 60)
+hist(log10(bigMart$Item_Sold[1:8523]))
+hist(sqrt(bigMart$Item_Sold)[1:8523])
+hist(((bigMart$Item_Sold)[1:8523]/max(bigMart$Item_Sold)))
+
+
+# Sqrt is giving little bit better normal curve
+
+# Minimun item Sold
+min(round(bigMart$Item_Sold[1:8523],0))
+
+# Is There ny relation with item solld and item weight
+ggplot(aes(x = Item_Sold, y = Item_Weight), data = bigMart[1:8523,])+
+  geom_point()+
+  facet_wrap(~ Item_Class)
+# Noting Usefull
+
+#Item Sold Vs Fat Content
+ggplot(aes(y = Item_Sold, x = Item_Fat_Content), data = bigMart[1:8523,])+
+  geom_boxplot()+
+  facet_wrap(~ Item_Class)
+
+# Item Visibility Item SOld
+ggplot(aes(y = Item_Sold, x = Item_Visibility), data = bigMart[1:8523,])+
+  geom_point()+
+  facet_wrap(~ Outlet_Identifier)
+
+ggplot(aes(y = Item_Sold, x = Item_Visibility, col = Item_Class), data = bigMart[1:8523,])+
+  geom_point()+
+  facet_wrap(~ Outlet_Identifier)
+
+# Item Visiiblity and food class 
+ggplot(data = bigMart)+
+  geom_density(aes(x = bigMart$Item_Visibility), adjust = 0.75)
+  facet_wrap(~ Outlet_Identifier)
 
 # Lets Do Some Feature Selection
 names(bigMart)
@@ -346,75 +396,162 @@ getSelectedAttributes(boruta.train, withTentative = FALSE)
 boruta.df <- attStats(boruta.train)
 boruta.df
 
-# # using Linear regression
+# using Linear regression
+
+# CV using Caret 
+# library(caret)
 # 
-# # Taking only )UT17 into consideration
-# bigMart$OUT <- ifelse(bigMart$Outlet_Identifier == "OUT017", 1, 0)
-# table(bigMart$OUT)
+# cv.fit <- train(Item_Sold ~ Outlet_Type+Outlet_Location_Type+Outlet_Size+
+#                   Year+MRP_Level, data = bigMart[1:8523,],
+#                 method = "lm",
+#                 trControl = trainControl(method = "cv", number = 10, repeats = 10))
 # 
-# lm.fit <- lm(Item_Sold ~ Outlet_Type+Outlet_Location_Type+Outlet_Size+
-#                Year, data = bigMart[1:8523,])
+# cv.fit
 # 
-# lm.predict <- predict(lm.fit, bigMart[8524:14204,])
-# lm.predictSales <- lm.predict*as.numeric(unlist(bigMart[8524:14204, "Item_MRP"]))
-# 
-# summary(lm.fit)
-# 
-# # Writing CSV file
-# write.csv(file = "BigMartSubmissionFile30_06_17.csv",
-#           x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
-#                          Item_Outlet_Sales = lm.predictSales),
-#           row.names = FALSE)
+lm.train <- select(bigMart[1:8523,], -c(Item_Weight,Item_Identifier,Item_Type))
 
 
-library(xgboost)
+lm.test <- select(bigMart[8524:14204,], -c(Item_Weight,Item_Outlet_Sales,Item_Sold,Item_Type,
+                                           Item_Identifier))
 
-trainDat <- model.matrix(Item_Sold ~ Outlet_Type+Outlet_Location_Type+Outlet_Size+
-                                    Year+MRP_Level+Outlet_Identifier,
-                         data = bigMart[1:8523,])
+library(caret)
 
-y = unlist(bigMart[1:8523,"Item_Sold"])
+# 10fold creoos validation
+cv <- train(Item_Sold~Outlet_Identifier, data = lm.train, 
+            method = "lm", 
+            trControl = trainControl(method = "cv", number = 10, repeats = 10))
+cv
 
+lm.fit1 <- lm(Item_Sold~Outlet_Identifier, data = lm.train)
 
-testDat <- model.matrix(~ Outlet_Type+Outlet_Location_Type+Outlet_Size+
-                          Year+MRP_Level+Outlet_Identifier,
-                        data = bigMart[8524:14204,])
+summary(lm.fit1)
 
-xgb <- xgboost(data = trainDat, 
-               label = y, 
-               nround=50,
-               booster = "gblinear",
-               objective = "reg:linear"
-               
-)
+lm.fit <- lm(Item_Sold ~ Outlet_Type, data = lm.train)
+summary(lm.fit)
 
+lm.predict1 <- predict(lm.fit1, newdata = lm.test)
+lm.predict1 <- lm.test$Item_MRP*lm.predict1
 
-xgb.predict <- predict(xgb, testDat)
-mrp <- as.vector(unlist(bigMart[8524:14204, "Item_MRP"]))
-xgb.predictSales <- xgb.predict*mrp
-head(xgb.predictSales)
-# Writing CSV file
-write.csv(file = "BigMartSubmissionFile1_06_17.csv",
+write.csv(file = "BigMartSubmissionFile03_07_17.csv",
           x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
-                         Item_Outlet_Sales = xgb.predictSales),
+                         Item_Outlet_Sales = lm.predict1),
           row.names = FALSE)
 
 
-# library(randomForest)
-# rf.fit <- randomForest(Item_Sold ~ Outlet_Type+Outlet_Location_Type+Outlet_Size+
-#                         Year, data = bigMart[1:8523,],
-#                        ntree = 500)
+# Excluding Outlet Type
+chisq.test(lm.train$Outlet_Location_Type, lm.train$Outlet_Type)
+
+chisq.test(lm.train$Outlet_Location_Type, lm.train$Outlet_Size)
+
+
+
 # 
-# rf.fit
+# library(xgboost)
 # 
-# rf.predict <- predict(rf.fit, bigMart[8524:14204,])
+# trainDat <- model.matrix(Item_Sold ~ Outlet_Identifier,
+#                          data = bigMart[1:8523,])[,-1]
 # 
-# summary(lm.fit)
+# y = unlist(bigMart[1:8523,"Item_Sold"])
 # 
+# 
+# testDat <- model.matrix(~ Outlet_Identifier+Item_MRP, data = bigMart[8524:14204,])[,-1]
+# 
+# 
+# xgb <- xgboost(data = trainDat,
+#                label = y,
+#                nrounds=500,
+#                objective = "reg:linear",
+#                eta = 0.1,
+#                gamma = 1,
+#                eval_metric = 'rmse' ,
+#                min_child_weight = 2,
+#                max_depth = 4,
+#                subsample = 0.85,
+#                colsample_bytree = 0.5,
+#                max_delta_step = 20)
+# 
+# 
+# xgb.predict <- predict(xgb, data.matrix(testDat))
+# 
+# mrp <- as.vector(unlist(bigMart[8524:14204, "Item_MRP"]))
+# 
+# xgb.predictSales <- xgb.predict*mrp
+# head(xgb.predictSales)
+# # Writing CSV file
+# write.csv(file = "BigMartSubmissionFile02_07_17.csv",
+#           x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
+#                          Item_Outlet_Sales = xgb.predictSales),
+#           row.names = FALSE)
+
+
+library(randomForest)
+
+names(bigMart)
+
+str(bigMart$Item_Identifier)
+
+bigMart$Item_Identifier <- as.factor(bigMart$Item_Identifier)
+
+rf.train <- select(bigMart[1:8523,], -c(Item_Weight,Item_Outlet_Sales, Item_Identifier))
+
+head(rf.train)
+
+rf.test <- select(bigMart[8524:14204,], -c(Item_Weight,Item_Outlet_Sales,Item_Sold))
+
+rf.test <- model.matrix(~., data = rf.test)
+
+library(doParallel)
+cl <- makeCluster(detectCores());
+registerDoParallel(cl)
+
+rf.fit <- randomForest(Item_Sold ~., data = rf.train,
+                       ntree = 1000)
+
+stopCluster(cl)
+registerDoSEQ()
+
+rf.fit
+
+rf.predict <- predict(rf.fit, bigMart[8524:14204,])
+
+summary(lm.fit)
+
+# Writing CSV file
+write.csv(file = "BigMartSubmissionFile29_06_17.csv",
+          x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
+                         Item_Outlet_Sales = rf.predict),
+          row.names = FALSE)
+
+varImpPlot(rf.fit)
+
+trainDataPy <- read.csv("train_modified.csv")
+
+
+trainDataPy <- select(trainDataPy, -c(Item_Identifier, Outlet_Identifier))
+
+testDataPy <- read.csv("test_modified.csv")
+testDataPy <- select(testDataPy, -c(Item_Identifier, Outlet_Identifier))
+names(testDataPy)
+
+scaledData <- trainDataPy %>%
+  mutate_each_(funs(scale(.) %>% as.vector), vars = c("Item_Outlet_Sales","Item_MRP",
+                                                      "Item_Visibility","Item_Visibility_MeanRatio"))
+
+scaledTestData <- testDataPy %>%
+  mutate_each_(funs(scale(.) %>% as.vector), vars = c("Item_MRP",
+                                                      "Item_Visibility","Item_Visibility_MeanRatio"))
+
+lmpy.fit <- lm(Item_Outlet_Sales ~., data = scaledData)
+
+summary(lmpy.fit)
+
+lmpy.predict <- predict(lmpy.fit, scaledTestData)
+
 # # Writing CSV file
 # write.csv(file = "BigMartSubmissionFile29_06_17.csv",
 #           x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
-#                          Item_Outlet_Sales = rf.predict),
+#                          Item_Outlet_Sales = lmpy.predict),
 #           row.names = FALSE)
 # 
-# varImpPlot(rf.fit)
+# cor.test(scaledData$Item_Type_Combined_1, scaledData$Item_Type_Combined_2)
+# 
