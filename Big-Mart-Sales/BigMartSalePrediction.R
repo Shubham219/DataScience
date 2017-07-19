@@ -377,8 +377,28 @@ ggplot(aes(y = Item_Sold, x = Item_Visibility, col = Item_Class), data = bigMart
 
 # Item Visiiblity and food class 
 ggplot(data = bigMart)+
-  geom_density(aes(x = bigMart$Item_Visibility), adjust = 0.75)
+  geom_density(aes(x = bigMart$Item_Visibility), adjust = 0.75)+
   facet_wrap(~ Outlet_Identifier)
+
+# Checking THe Item_FatContent Vs Item Sold
+ggplot(aes(x = Item_Fat_Content, y = Item_Sold), data = bigMart[1:8523,])+
+  geom_boxplot() # Nothing Useful
+
+
+head(bigMart$Item_Identifier)
+
+head(bigMart$Outlet_Identifier)
+
+bigMart[which(bigMart$Item_Identifier == "FDP36"), c("Item_Sold","Outlet_Identifier","Item_MRP")]
+
+prouduct <- levels(as.factor(bigMart$Item_Identifier))
+
+View(bigMart[1:8523,]%>%
+  group_by(Outlet_Identifier, Item_Identifier) %>%
+  summarise(ItemSold = mean(Item_Sold),
+            Item_Visibility = mean(Item_Visibility)*100))
+
+# Seems no effect of Visibilty on Item Sold
 
 # Lets Do Some Feature Selection
 names(bigMart)
@@ -386,26 +406,27 @@ str(bigMart)
 
 # doing it on parallel cores
 library(doParallel)
-cl <- makeCluster(detectCores()); 
-registerDoParallel(cl)
 
-# Feature Selection Using Boruta 
-library(Boruta)
-set.seed(100)
-boruta.train <- Boruta(Item_Sold~.-Item_Outlet_Sales, data = bigMart[1:8523,], doTrace = 2)
-
-stopCluster(cl); 
-registerDoSEQ();
-
-print(boruta.train)
-
-par(las = 2)
-plot(boruta.train, cex.axis = 0.6)
-
-getSelectedAttributes(boruta.train, withTentative = FALSE)
-
-boruta.df <- attStats(boruta.train)
-boruta.df
+# cl <- makeCluster(detectCores()); 
+# registerDoParallel(cl)
+# 
+# # Feature Selection Using Boruta 
+# library(Boruta)
+# set.seed(100)
+# boruta.train <- Boruta(Item_Sold~.-Item_Outlet_Sales, data = bigMart[1:8523,], doTrace = 2)
+# 
+# stopCluster(cl); 
+# registerDoSEQ();
+# 
+# print(boruta.train)
+# 
+# par(las = 2)
+# plot(boruta.train, cex.axis = 0.6)
+# 
+# getSelectedAttributes(boruta.train, withTentative = FALSE)
+# 
+# boruta.df <- attStats(boruta.train)
+# boruta.df
 
 # Making Predictive Models
 #==========================================================================================
@@ -415,12 +436,18 @@ boruta.df
 lm.train <- select(bigMart[1:8523,], -c(Item_Weight,Item_Identifier,Item_Type, 
                                         Item_Outlet_Sales, Outlet_Identifier))
 
+
 lm.test <- select(bigMart[8524:14204,], -c(Item_Weight,Item_Outlet_Sales,Item_Type,
                                            Item_Identifier, Outlet_Identifier))
 
 
-
 lm.fit <- lm(Item_Sold~., data = lm.train)
+
+summary(step(lm(Item_Sold ~., data = lm.train), direction = "backward", trace = 2))
+
+lm.fit <- lm(formula = Item_Sold ~ Item_MRP + Outlet_Size + Outlet_Location_Type + 
+     Outlet_Type + Year + I(Item_Visibility*100), data = lm.train)
+
 
 summary(lm.fit)
 
@@ -436,6 +463,7 @@ chisq.test(lm.train$Outlet_Location_Type, lm.train$Outlet_Location_Type)
 
 
 # Using only outlet identifier for training
+
 lm.fit1 <- lm(Item_Sold ~ Outlet_Location_Type+Outlet_Size+Outlet_Type+Year,
               data = lm.train)
 
@@ -444,7 +472,8 @@ summary(lm.fit1)
 # 10 fold cross validation
 library(caret)
 
-cv <- train(Item_Sold ~ Outlet_Location_Type+Outlet_Size+Outlet_Type+Year, data = lm.train, 
+cv <- caret::train(Item_Sold ~ Outlet_Location_Type+Outlet_Size+Outlet_Type+Year,
+            data = lm.train, 
             method = "lm", 
             trControl = trainControl(method = "repeatedcv", repeats = 10))
 cv
@@ -452,12 +481,12 @@ cv
 # Making Predictons
 lm.predict <- predict(lm.fit1, newdata = lm.test)
 
-salesPrice <- lm.predict * lm.test$Item_MRP
+lm.salesPrice <- lm.predict * lm.test$Item_MRP
 
 # Writing Submission Files
 write.csv(file = "BigMartSubmissionFile03_07_17.csv",
           x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
-                         Item_Outlet_Sales = salesPrice),
+                         Item_Outlet_Sales = lm.salesPrice),
           row.names = FALSE)
 
 # Leader Board Score 1148.195
@@ -559,86 +588,315 @@ write.csv(file = "BigMartSubmissionFile05_06_17.csv",
 library(xgboost)
 
 # Preparing Data
-trainDat <- model.matrix(Item_Sold ~ Outlet_Location_Type+Outlet_Size+Outlet_Type+Year,
-                         data = bigMart[1:8523,])[,-1]
 
-y = unlist(bigMart[1:8523,"Item_Sold"])
+xgbTrainData <- model.matrix(Item_Sold ~., 
+                             data = bigMart[1:8523,c(4,6,7,8,9,10,12,14,15)])[,-1]
+
+y = bigMart$Item_Sold[1:8523]
 
 
-testDat <- model.matrix(~ Outlet_Location_Type+Outlet_Size+Outlet_Type+Year,
-                        data = bigMart[8524:14204,])[,-1]
+xgbTestData <- model.matrix(Item_Sold~., 
+                            bigMart[8524:14204,c(4,6,7,8,9,10,12,14,15)])[,-1]
 
-# Trainging the data 
-xgb <- xgboost(data = trainDat,
-               label = y,
-               booster = "gbtree",
-               nrounds=500,
-               objective = "reg:linear",
-               gamma = 1,
-               eval_metric = 'rmse' ,
-               eta = 0.01,
-               min_child_weight = 2,
-               max_depth = 4,
-               subsample = 0.5,
-               colsample_bytree = 0.5,
-               max_delta_step = 10
-               )
+# Cross Validation in cv
+params <- list(booster = "gblinear", objective = "reg:linear",
+               gamma=0, max_depth=15, min_child_weight=1, subsample=0.8,
+               colsample_bytree=0.5, seed = 1)
+
+
+  cv <- xgb.cv(params = params, data = xgbTrainData,
+             nrounds = 200, nfold = 10, label = y)
 
 # Predicting Sales
-xgb.predict <- predict(xgb, data.matrix(testDat))
+
+xgb <- xgboost(params = params, data = xgbTrainData, nrounds = 200, label = y)
+
+xgb.predict <- predict(xgb, xgbTestData)
 
 mrp <- as.vector(unlist(bigMart[8524:14204, "Item_MRP"]))
 
-xgb.predictSales <- xgb.predict*mrp
-
+xgb.predictSales <- xgb.predict * mrp
 
 # Writing CSV file
-write.csv(file = "BigMartSubmissionFile06_07_17.csv",
+write.csv(file = "BigMartSubmissionFile09_07_17.csv",
           x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
                          Item_Outlet_Sales = xgb.predictSales),
           row.names = FALSE)
 
-# Leader Board Score 1148.73
-#=======================================================================================================
 
 
-library(randomForest)
+# Using MLRn
 
-names(bigMart)
+library(mlr)
 
-rf.train <- select(bigMart[1:8523,], -c(Item_Weight,Item_Outlet_Sales, Item_Identifier))
+mlrTrainData <- as.data.frame(bigMart[1:8523,c(4,6,7,8,9,10,12,14,15)])
 
-head(rf.train)
+mlrTestData <- as.data.frame(bigMart[8524:14204,c(4,6,7,8,9,10,12,14,15)])
 
-rf.test <- select(bigMart[8524:14204,], -c(Item_Weight,Item_Outlet_Sales,Item_Sold))
+#create tasks
+traintask <- makeRegrTask(data = mlrTrainData, target = "Item_Sold")
+testtask <- makeRegrTask(data = mlrTestData,target = "Item_Sold")
 
-library(doParallel)
-cl <- makeCluster(detectCores());
-registerDoParallel(cl)
+#do one hot encoding`<br/> 
+traintask <- createDummyFeatures(obj = traintask) 
+testtask <- createDummyFeatures(obj = testtask)
 
-rf.fit <- randomForest(Item_Sold ~ Outlet_Identifier+Item_Visibility, data = rf.train,
-                       ntree = 500,
-                       importance = TRUE)
+lrn <- makeLearner("regr.xgboost",predict.type = "response")
+lrn$par.vals <- list(objective="reg:linear", eval_metric="rmse", 
+                      nrounds=500L, eta = 0.1)
 
-stopCluster(cl)
-registerDoSEQ()
+#set parameter space
+params <- makeParamSet(makeDiscreteParam("booster",values = c("gbtree","gblinear")),
+                       makeIntegerParam("max_depth",lower = 3L,upper = 10L),
+                      
+                       makeNumericParam("min_child_weight",lower = 1L,upper = 10L),
+                       makeNumericParam("subsample",lower = 0.5,upper = 1),
+                       makeNumericParam("colsample_bytree",lower = 0.5,upper = 1))
 
-importance(rf.fit)
-varImpPlot(rf.fit)
-rf.fit
+#set resampling strategy
+rdesc <- makeResampleDesc("CV",iters=5L)
 
-rf.fit2 <- randomForest(Item_Sold ~ Outlet_Type,
-                        data = rf.train, ntree = 1000, mtry = 1,
-                       importance = TRUE)
+ctrl <- makeTuneControlRandom(maxit = 10L)
 
-rf.fit2
-importance(rf.fit2)
+#parameter tuning
+mytune <- tuneParams(learner = lrn, task = traintask, resampling = rdesc,
+                     measures = rmse, par.set = params, control = ctrl, show.info = T)
 
-rf.predict <- predict(rf.fit2, rf.test)
+mytune$y 
 
-salesPrice <- (rf.predict^2) * rf.test$Item_MRP
+#set hyperparameters
+lrn_tune <- setHyperPars(lrn,par.vals = mytune$x)
+
+#train model
+xgmodel <- train(learner = lrn_tune,task = traintask)
+
+#predict model
+xgpred <- predict(xgmodel,testtask)
+
+xg.salesPrice <- xgpred$data$response * bigMart$Item_MRP[8524:14204]
+
 # Writing CSV file
+write.csv(file = "BigMartSubmissionFile09_07_17.csv",
+          x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
+                         Item_Outlet_Sales = xg.salesPrice),
+          row.names = FALSE)
+
+# Leader Board Score 1148.73
+
+#================================================================================
+library(h2o)
+
+# Load Datasets with the new predictors
+# in the order of their importance,
+# according to rfe
+# predictors <- lm.train[,c("Outlet_Location_Type", "Outlet_Size", "Outlet_Type",
+#                           "Year","Item_Sold")]
+
+# Initiating h2o
+localH2O <- h2o.init(nthreads = -1)
+
+# Training the parameter
+predictors <- bigMart[1:8523,c(4,6,8,9,10,12,14,15)]
+train.h2o <- as.h2o(predictors)
+
+# Partition the data into training, validation and test sets
+splits <- h2o.splitFrame(data = train.h2o, 
+                         ratios = 0.8,  #partition data into 70%, 20% chunks
+                         seed = 1)  #setting a seed will guarantee reproducibility
+
+# Preparing Data
+h2o.trainData <- splits[[1]]
+
+h2o.validationData <- splits[[2]]
+
+h2o.testData <- as.h2o(bigMart[8524:14204,c(4,6,8,9,10,12,14,15)])
+
+# Identify response and predictor variables
+y <- "Item_Sold"
+x <- c(1:5,7,8)
+
+
+
+
+#==============================================================================================
+# MUltiple regression model
+
+regression.model <- h2o.glm(y = y, x = x, training_frame = train.h2o,
+                             family = "gaussian")
+
+h2o.performance(regression.model)
+
+#make predictions
+predict.reg <- as.data.frame(h2o.predict(regression.model, h2o.testData))
+
+sales <- predict.reg$predict * bigMart$Item_MRP[8524:14204]
+
 write.csv(file = "BigMartSubmissionFile06_07_17.csv",
           x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
-                         Item_Outlet_Sales = salesPrice),
+                         Item_Outlet_Sales = sales),
+          row.names = FALSE)
+
+#=================================================================================================
+
+#Random Forest
+
+# Top algo
+# cl <- makeCluster(detectCores())
+# registerDoParallel(cl)
+# 
+# system.time(
+#   rforest.model <- h2o.randomForest(y=y.dep, x=c(1:5,7,8),
+#                                     training_frame = train.h2o, 
+#                                     ntrees = 2000, mtries = 6,
+#                                     max_depth = 5, seed = 1122)
+# )
+
+# Finding Out Best Parameters For Random Forest 
+
+# Setting Hyperparameters
+rf_params <- list(mtries = seq(1,7,1),
+                  max_depth = seq(3,10,1))
+
+# Search Criteria
+search_criteria <- list(strategy = "RandomDiscrete", 
+                         max_models = 36)
+
+# Ftting Parameters
+rf_grid <- h2o.grid("randomForest", x=c(1:5,7,8), y = y,
+                    grid_id = "rf_grid",
+                    training_frame = h2o.trainData,
+                    validation_frame = h2o.validationData,
+                    ntrees = 500,
+                    seed = 1,
+                    hyper_params = rf_params,
+                    search_criteria = search_criteria
+)
+
+rf_gridperf <- h2o.getGrid(grid_id = "rf_grid", 
+                           sort_by = "rmse", 
+                           decreasing = F)
+print(rf_gridperf)
+
+
+best_rf_model_id <- rf_gridperf@model_ids[[1]]
+best_rf <- h2o.getModel(best_rf_model_id)
+
+# Now let's evaluate the model performance on a test set
+# so we get an honest estimate of top model performance
+best_rf_perf <- h2o.performance(model = best_rf, 
+                                newdata = h2o.testData)
+h2o.rmse(best_rf_perf)  # 0.683855910541
+
+predict.rf <- as.data.frame(h2o.predict(best_rf, h2o.testData))
+
+sales <- predict.rf$predict * bigMart$Item_MRP[8524:14204]
+
+write.csv(file = "BigMartSubmissionFile06_07_17.csv",
+          x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
+                         Item_Outlet_Sales = sales),
+          row.names = FALSE)
+
+
+system.time(
+  rforest.model <- h2o.randomForest(y=y, x=x,
+                                    training_frame = train.h2o,
+                                    ntrees =  1500, mtries = 7,
+                                    max_depth = 5, seed = 1122)
+)
+
+
+
+h2o.performance(rforest.model)
+
+#check variable importance
+h2o.varimp(rforest.model)
+
+predict.rforest <- as.data.frame(h2o.predict(rforest.model, h2o.testData))
+
+sales <- predict.rforest$predict * bigMart$Item_MRP[8524:14204]
+
+write.csv(file = "BigMartSubmissionFile06_07_17.csv",
+          x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
+                         Item_Outlet_Sales = sales),
+          row.names = FALSE)
+
+#=================================================================================================
+
+#GBM
+system.time(
+  gbm.model <- h2o.gbm(y=y, x=x, training_frame = train.h2o,
+                       ntrees = 1000, max_depth = 3, 
+                       learn_rate = 0.01, seed = 1122,
+                       col_sample_rate = 0.5,
+                       sample_rate = 0.7)
+)
+
+h2o.performance (gbm.model)
+
+predict.gbm <- as.data.frame(h2o.predict(gbm.model, h2o.testData))
+
+sales <- predict.gbm$predict * bigMart$Item_MRP[8524:14204]
+
+write.csv(file = "BigMartSubmissionFile19_07_17.csv",
+          x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
+                         Item_Outlet_Sales = sales),
+          row.names = FALSE)
+
+#=======================================================================================================================
+
+nfolds <- 5
+# Train & Cross-validate a GBM
+my_gbm <- h2o.gbm(x = x,
+                  y = y,
+                  training_frame = train.h2o,
+                  max_depth = 3,
+                  ntrees = 1000,
+                  col_sample_rate = 0.5,
+                  sample_rate = 0.8,
+                  learn_rate = 0.01,
+                  nfolds = nfolds,
+                  fold_assignment = "Modulo",
+                  keep_cross_validation_predictions = TRUE,
+                  seed = 1)
+
+# Train & Cross-validate a RF
+my_rf <- h2o.randomForest(x = x,
+                          y = y,
+                          training_frame = train.h2o,
+                          nfolds = nfolds,
+                          max_depth = 6,
+                          mtries = 4,
+                          ntrees = 1000,
+                          fold_assignment = "Modulo",
+                          keep_cross_validation_predictions = TRUE,
+                          seed = 1)
+
+my_rf
+# Train & Cross-validate a DNN
+
+# Train regression model
+my_lm <- h2o.glm(x = x, y = y, training_frame = train.h2o, family = "gaussian",
+                 nfolds = nfolds, fold_assignment = "Modulo",
+                 keep_cross_validation_predictions = TRUE,
+                 seed = 1)
+
+# Train a stacked ensemble using the H2O and XGBoost models from above
+base_models <- list(my_gbm@model_id, my_rf@model_id, my_lm@model_id)
+
+ensemble <- h2o.stackedEnsemble(x = x,
+                                y = y,
+                                training_frame = train.h2o,
+                                base_models = base_models)
+
+# Eval ensemble performance on a test set
+perf <- h2o.performance(ensemble, newdata = train.h2o)
+
+
+predict.ensm <- as.data.frame(h2o.predict(ensemble, h2o.testData))
+
+sales <- predict.ensm$predict * bigMart$Item_MRP[8524:14204]
+
+write.csv(file = "BigMartSubmissionFile17_07_17.csv",
+          x = data.frame(bigMart[8524:14204, c("Item_Identifier","Outlet_Identifier")],
+                         Item_Outlet_Sales = sales),
           row.names = FALSE)
